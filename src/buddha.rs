@@ -55,11 +55,7 @@ pub mod rand {
     }
 
     impl ImaginaryNumberSource {
-        pub fn new(
-            real_range: (f64, f64),
-            imaginary_range: (f64, f64),
-            seed: u64,
-        ) -> ImaginaryNumberSource {
+        pub fn new(real_range: (f64, f64), imaginary_range: (f64, f64), seed: u64) -> ImaginaryNumberSource {
             ImaginaryNumberSource {
                 rng: rand::rngs::SmallRng::seed_from_u64(seed),
                 real: Uniform::from(real_range.0..real_range.1),
@@ -68,10 +64,7 @@ pub mod rand {
         }
 
         pub fn sample(&mut self) -> super::ImaginaryNumber {
-            super::ImaginaryNumber::new(
-                self.real.sample(&mut self.rng),
-                self.imaginary.sample(&mut self.rng),
-            )
+            super::ImaginaryNumber::new(self.real.sample(&mut self.rng), self.imaginary.sample(&mut self.rng))
         }
     }
 }
