@@ -1,51 +1,10 @@
 extern crate image;
-extern crate rand;
 
-use rand::distributions::Uniform;
-use rand::prelude::*;
-use std::fmt;
-use std::ops::{Add, Mul};
+pub mod buddha;
+use self::buddha::*;
 
-#[derive(Debug, Copy, Clone)]
-struct ImaginaryNumber {
-    real: f64,
-    imaginary: f64,
-}
-
-impl ImaginaryNumber {
-    fn new(real: f64, imaginary: f64) -> ImaginaryNumber {
-        ImaginaryNumber {
-            real: real,
-            imaginary: imaginary,
-        }
-    }
-}
-
-impl Add for ImaginaryNumber {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self {
-        let real = self.real + rhs.real;
-        let imaginary = self.imaginary + rhs.imaginary;
-        ImaginaryNumber::new(real, imaginary)
-    }
-}
-
-impl Mul for ImaginaryNumber {
-    type Output = Self;
-
-    fn mul(self, rhs: Self) -> Self {
-        let real = self.real * rhs.real - self.imaginary * rhs.imaginary;
-        let imaginary = self.real * rhs.imaginary + rhs.real * self.imaginary;
-        ImaginaryNumber::new(real, imaginary)
-    }
-}
-
-impl fmt::Display for ImaginaryNumber {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({}, {})", self.real, self.imaginary)
-    }
-}
+use std::sync::mpsc;
+use std::thread;
 
 struct Rasterizer {
     real_range: (f64, f64),
@@ -83,19 +42,6 @@ impl Rasterizer {
     }
 }
 
-fn escapes(point: ImaginaryNumber, limit: u64, bailout: f64) -> u64 {
-    let mut current = ImaginaryNumber::new(0.0, 0.0);
-    let mut count = 0;
-    for _ in 0..limit {
-        current = current * current + point;
-        if (current.real * current.real) + (current.imaginary * current.imaginary) > bailout {
-            return count;
-        }
-        count = count + 1;
-    }
-    return limit;
-}
-
 fn draw(point: ImaginaryNumber, iterations: u64, rasterizer: &Rasterizer, data: &mut [u64]) {
     let mut current = ImaginaryNumber::new(0.0, 0.0);
     for _ in 0..iterations {
@@ -106,10 +52,10 @@ fn draw(point: ImaginaryNumber, iterations: u64, rasterizer: &Rasterizer, data: 
     }
 }
 
-fn to_image(data: &mut[u64], resolution: (u64, u64)) {
+fn to_image(data: &mut [u64], resolution: (u64, u64)) {
     let max = data.iter().max().unwrap();
     let img = image::ImageBuffer::from_fn(resolution.0 as u32, resolution.1 as u32, |x, y| {
-        let raw = data[(x as u64*resolution.1+y as u64) as usize];
+        let raw = data[(x as u64 * resolution.1 + y as u64) as usize];
         let normalized = raw * 255 / max;
         image::Luma([normalized as u8])
     });
@@ -121,34 +67,54 @@ fn main() {
     // TODO: Fix this and avoid distortion and rotate
     let rasterizer = Rasterizer::new((-2.0, 2.0), (-2.0, 2.0), resolution.0, resolution.1);
 
-    let mut imaginary_number_source = {
-        let mut rng = rand::rngs::SmallRng::seed_from_u64(1988);
-        let real_dist = Uniform::from(rasterizer.real_range.0..rasterizer.real_range.1);
-        let imaginary_dist =
-            Uniform::from(rasterizer.imaginary_range.0..rasterizer.imaginary_range.1);
-        move || ImaginaryNumber::new(real_dist.sample(&mut rng), imaginary_dist.sample(&mut rng))
-    };
-
-    let limit = 8000;
+    let limit = 12000;
     let bailout = 4.0;
-    let mut points = vec![];
 
-    println!("Searching");
-    while points.len() < 10000000 {
-        let point = imaginary_number_source();
-        let iterations = escapes(point, limit, bailout);
-        if (iterations != limit) && (iterations > 5) {
-            points.push((point, iterations));
-            //println!("point = {}, {}", point, rasterizer.rasterize(point).0);
+    let mut data = vec![0u64; (rasterizer.resolution_x * rasterizer.resolution_y) as usize];
+
+    let num_cores = 4;
+    let (tx, rx) = mpsc::channel();
+
+    for _ in 0..num_cores {
+        let thread_tx = tx.clone();
+        let mut random_points = buddha::rand::ImaginaryNumberSource::new(
+            rasterizer.real_range,
+            rasterizer.imaginary_range,
+            1988,
+        );
+        thread::spawn(move || {
+            loop {
+                // Find qualifying points
+                let mut points = vec![];
+                while points.len() < 20000 {
+                    let point = random_points.sample();
+
+                    escapes(point, limit, bailout)
+                        .filter(|&iteration| iteration > 5)
+                        .map(|iteration| points.push((point, iteration)));
+                }
+
+                if thread_tx.send(points).is_err() {
+                    return;
+                }
+            }
+        });
+    }
+
+    // Receive point lists and store them and update image
+    let mut count = 0;
+    for points in rx {
+        for (point, iterations) in points {
+            draw(point, iterations, &rasterizer, &mut data);
+        }
+
+        count += 1;
+        if (count % 50) == 0 {
+            println!("Saving");
+            to_image(&mut data, resolution);
+        }
+        if count == 10000 {
+            return;
         }
     }
-
-    println!("Building picture");
-    let mut data = vec![0u64; (rasterizer.resolution_x * rasterizer.resolution_y) as usize];
-    for (point, iterations) in points {
-        draw(point, iterations, &rasterizer, &mut data);
-    }
-
-    println!("Saving");
-    to_image(&mut data, resolution);
 }
