@@ -69,9 +69,33 @@ pub mod rand {
     }
 }
 
+fn definitely_inside_mandelbrot(point: ImaginaryNumber) -> bool {
+    let squared_imaginary = point.imaginary.powf(2.0);
+
+    // Period2 Bulb
+    let inside_p2_bulb = ((point.real+1.0).powf(2.0)+squared_imaginary) <= (1.0/16.0);
+    if inside_p2_bulb {
+        return true;
+    }
+
+    // Cardoid
+    let p = ((point.real - 0.25).powf(2.0)+squared_imaginary).sqrt();
+    let inside_cardiod = point.real <= p - 2.0*p.powf(2.0) + 0.25;
+    if inside_cardiod {
+        return true;
+    }
+
+    false
+}
+
 pub fn escapes(point: ImaginaryNumber, limit: u64, bailout: f64) -> Option<u64> {
     let mut current = ImaginaryNumber::new(0.0, 0.0);
     let mut count = 0;
+
+    if definitely_inside_mandelbrot(point) {
+        return Option::None;
+    }
+
     for _ in 0..limit {
         current = current * current + point;
         if (current.real * current.real) + (current.imaginary * current.imaginary) > bailout {
