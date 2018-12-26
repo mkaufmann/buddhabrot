@@ -32,16 +32,17 @@ fn main() {
     // Buddha sampling constants
     let real_range = (-2.0, 1.0);
     let imaginary_range = (-1.4, 1.4);
-    let limit = 50000;
+    let limit = 20000000;
     let bailout = 4.0;
-    let min_iterations = 10000;
+    let min_iterations = 1000000;
+    let target_points_count = 10000000000;
 
     // Image constants
     let resolution = (1920, 1920);
 
     // Runtime constants
     let num_cores = 4;
-    let chunk_size = 10;
+    let chunk_iterations_size = 5000000;
     let base_seed = 1988;
 
     let (tx, rx) = mpsc::channel();
@@ -53,12 +54,16 @@ fn main() {
             loop {
                 // Find qualifying points
                 let mut points = vec![];
-                let mut probed = 0;
-                while points.len() < chunk_size {
+                let mut probed = 0u64;
+                let mut iterations_sum = 0u64;
+                while iterations_sum < chunk_iterations_size {
                     let point = random_points.sample();
                     escapes(point, limit, bailout)
                         .filter(|&iteration| iteration > min_iterations)
-                        .map(|iteration| points.push((point, iteration)));
+                        .map(|iteration| {
+                            iterations_sum += iteration;
+                            points.push((point, iteration))
+                        });
                     probed += 1;
                 }
 
@@ -81,27 +86,30 @@ fn main() {
     };
 
     let mut histogram = Histogram::new(resolution.0, resolution.1, -2.0, 2.0, -2.0, 2.0);
-    let mut count = 0;
     let mut total_probed = 0;
+    let mut total_points = 0;
+    let save_interval = target_points_count/10;
+    let mut save_points = save_interval;
     let start = Instant::now();
     for (points, probed) in rx {
         total_probed += probed;
         for (point, iterations) in points {
             collect(point, iterations, &mut histogram);
-            if iterations > 5000 {
+            total_points += iterations;
+            if iterations > (limit/10) {
                 file.write(format!("{{ point: [{},{}], iterations: {}}}\n", point.real, point.imaginary, iterations).as_bytes())
                     .unwrap();
             }
         }
 
-        count += 1;
-        if (count % 5) == 0 {
-            println!("Saving {}: {}s", count, start.elapsed().as_secs());
+        if total_points >= save_points {
+            println!("Saving {} from {}: {}s", total_points, total_probed, start.elapsed().as_secs());
             save_to_image("output/test.png", &mut histogram.data, resolution).unwrap();
+            save_points += save_interval;
         }
-        if count == 200 {
+        if total_points >= target_points_count {
             println!("Duration: {}s", start.elapsed().as_secs());
-            println!("Found: {}, probed: {}", chunk_size*count, total_probed);
+            println!("Found: {}, probed: {}", total_points, total_probed);
             return;
         }
     }
