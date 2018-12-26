@@ -89,12 +89,14 @@ fn definitely_inside_mandelbrot(point: ImaginaryNumber) -> bool {
 }
 
 pub fn escapes(point: ImaginaryNumber, limit: u64, bailout: f64) -> Option<u64> {
-    let mut current = ImaginaryNumber::new(0.0, 0.0);
-    let mut count = 0;
-
+    // Points that are inside the mandelbrot set would never escape, thus we use some quick
+    // check to cheaply detect the biggest areas in the mandelbrot set without having to
+    // iterate until the limit.
     if definitely_inside_mandelbrot(point) {
         return Option::None;
     }
+
+    let mut current = ImaginaryNumber::new(0.0, 0.0);
 
     // We detect cycles by remembering one `reference point` and then checking all new points
     // against this point. For one start point, the cycle can only start after some
@@ -119,13 +121,11 @@ pub fn escapes(point: ImaginaryNumber, limit: u64, bailout: f64) -> Option<u64> 
     for i in 0..limit {
         current = current * current + point;
         if (current.real * current.real) + (current.imaginary * current.imaginary) > bailout {
-            return Option::Some(count);
+            return Option::Some(i);
         }
         if has_cycle(i, current) {
             return Option::None;
         }
-
-        count = count + 1;
     }
 
     return Option::None;
