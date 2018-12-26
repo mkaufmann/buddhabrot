@@ -25,7 +25,7 @@ fn collect(point: ImaginaryNumber, iterations: u64, histogram: &mut Histogram) {
 
 fn construct_file_name(prefix: &str, suffix: &str) -> String {
     let now = chrono::Utc::now();
-    format!("{}{}{}", prefix, now.to_string().replace(":","-").replace(" UTC",""), suffix)
+    format!("{}{}{}", prefix, now.to_string().replace(":", "-").replace(" UTC", ""), suffix)
 }
 
 fn main() {
@@ -58,12 +58,10 @@ fn main() {
                 let mut iterations_sum = 0u64;
                 while iterations_sum < chunk_iterations_size {
                     let point = random_points.sample();
-                    escapes(point, limit, bailout)
-                        .filter(|&iteration| iteration > min_iterations)
-                        .map(|iteration| {
-                            iterations_sum += iteration;
-                            points.push((point, iteration))
-                        });
+                    escapes(point, limit, bailout).filter(|&iteration| iteration > min_iterations).map(|iteration| {
+                        iterations_sum += iteration;
+                        points.push((point, iteration))
+                    });
                     probed += 1;
                 }
 
@@ -88,7 +86,7 @@ fn main() {
     let mut histogram = Histogram::new(resolution.0, resolution.1, -2.0, 2.0, -2.0, 2.0);
     let mut total_probed = 0;
     let mut total_points = 0;
-    let save_interval = target_points_count/10;
+    let save_interval = target_points_count / 10;
     let mut save_points = save_interval;
     let start = Instant::now();
     for (points, probed) in rx {
@@ -96,7 +94,7 @@ fn main() {
         for (point, iterations) in points {
             collect(point, iterations, &mut histogram);
             total_points += iterations;
-            if iterations > (limit/10) {
+            if iterations > (limit / 10) {
                 file.write(format!("{{ point: [{},{}], iterations: {}}}\n", point.real, point.imaginary, iterations).as_bytes())
                     .unwrap();
             }
