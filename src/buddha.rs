@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops::{Add, Mul};
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct ImaginaryNumber {
     pub real: f64,
     pub imaginary: f64,
@@ -96,14 +96,37 @@ pub fn escapes(point: ImaginaryNumber, limit: u64, bailout: f64) -> Option<u64> 
         return Option::None;
     }
 
-    for _ in 0..limit {
+    // We detect cycles by remembering one `reference point` and then checking all new points
+    // against this point. For one start point, the cycle can only start after some
+    // iteration. We thus update the `reference point` in increasing intervals and thus are able
+    // to detect cycles up to the length of the current interval. This is far cheaper compared to
+    // maintaining a map.
+    let mut has_cycle = {
+        let mut reference_point = current;
+        let mut next_reference_update = 4;
+        move |iteration, current| {
+            if current == reference_point {
+                return true;
+            }
+            if iteration == next_reference_update {
+                reference_point = current;
+                next_reference_update *= 2;
+            }
+            return false;
+        }
+    };
+
+    for i in 0..limit {
         current = current * current + point;
         if (current.real * current.real) + (current.imaginary * current.imaginary) > bailout {
             return Option::Some(count);
         }
+        if has_cycle(i, current) {
+            return Option::None;
+        }
+
         count = count + 1;
     }
 
-    // TODO: Find cycles efficiently (check if equal to past value, updating the value in doubling intervals)
     return Option::None;
 }
