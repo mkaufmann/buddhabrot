@@ -105,7 +105,7 @@ pub fn escapes(point: ImaginaryNumber, limit: u64, bailout: f64) -> Option<u64> 
     // maintaining a map.
     let mut has_cycle = {
         let mut reference_point = current;
-        let mut next_reference_update = 4;
+        let mut next_reference_update = 1;
         move |iteration, current| {
             if current == reference_point {
                 return true;
